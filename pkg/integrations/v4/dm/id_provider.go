@@ -10,52 +10,52 @@ import (
 	"github.com/newrelic/infrastructure-agent/pkg/integrations/v4/protocol"
 )
 
-type RegisteredEntitiesNameToID map[string]entity.ID
-type UnregisteredEntitiesNamed map[string]UnregisteredEntity
+type registeredEntitiesNameToID map[string]entity.ID
+type unregisteredEntitiesNamed map[string]unregisteredEntity
 type reason string
 
-type UnregisteredEntity struct {
+type unregisteredEntity struct {
 	Reason reason
 	Err    error
 	Entity protocol.Entity
 }
 
-type UnregisteredEntities []UnregisteredEntity
+type UnregisteredEntities []unregisteredEntity
 
 const reasonClientError = "Identity client error"
 const reasonEntityError = "Entity error"
 
-func newUnregisteredEntity(entity protocol.Entity, reason reason, err error) UnregisteredEntity {
-	return UnregisteredEntity{
+func newUnregisteredEntity(entity protocol.Entity, reason reason, err error) unregisteredEntity {
+	return unregisteredEntity{
 		Entity: entity,
 		Reason: reason,
 		Err:    err,
 	}
 }
 
-type idProviderInterface interface {
-	Entities(agentIdn entity.Identity, entities []protocol.Entity) (registeredEntities RegisteredEntitiesNameToID, unregisteredEntities UnregisteredEntities)
+type idProvider interface {
+	ResolveEntities(agentIdn entity.Identity, entities []protocol.Entity) (registeredEntities registeredEntitiesNameToID, unregisteredEntities UnregisteredEntities)
 }
 
-type idProvider struct {
+type cachedIdProvider struct {
 	client               identityapi.RegisterClient
-	cache                RegisteredEntitiesNameToID
-	unregisteredEntities UnregisteredEntitiesNamed
+	cache                registeredEntitiesNameToID
+	unregisteredEntities unregisteredEntitiesNamed
 }
 
-func NewIDProvider(client identityapi.RegisterClient) *idProvider {
-	cache := make(RegisteredEntitiesNameToID)
-	unregisteredEntities := make(UnregisteredEntitiesNamed)
-	return &idProvider{
+func NewCachedIDProvider(client identityapi.RegisterClient) *cachedIdProvider {
+	cache := make(registeredEntitiesNameToID)
+	unregisteredEntities := make(unregisteredEntitiesNamed)
+	return &cachedIdProvider{
 		client:               client,
 		cache:                cache,
 		unregisteredEntities: unregisteredEntities,
 	}
 }
 
-func (p *idProvider) Entities(agentIdn entity.Identity, entities []protocol.Entity) (registeredEntities RegisteredEntitiesNameToID, unregisteredEntities UnregisteredEntities) {
+func (p *cachedIdProvider) ResolveEntities(agentIdn entity.Identity, entities []protocol.Entity) (registeredEntities registeredEntitiesNameToID, unregisteredEntities UnregisteredEntities) {
 	unregisteredEntities = make(UnregisteredEntities, 0)
-	registeredEntities = make(RegisteredEntitiesNameToID, 0)
+	registeredEntities = make(registeredEntitiesNameToID, 0)
 	entitiesToRegister := make([]protocol.Entity, 0)
 
 	for _, e := range entities {

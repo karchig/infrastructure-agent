@@ -61,9 +61,9 @@ type mockedIdProvider struct {
 	mock.Mock
 }
 
-func (mk *mockedIdProvider) Entities(agentIdn entity.Identity, entities []protocol.Entity) (registeredEntities RegisteredEntitiesNameToID, unregisteredEntities UnregisteredEntities) {
+func (mk *mockedIdProvider) ResolveEntities(agentIdn entity.Identity, entities []protocol.Entity) (registeredEntities registeredEntitiesNameToID, unregisteredEntities UnregisteredEntities) {
 	args := mk.Called(agentIdn, entities)
-	return args.Get(0).(RegisteredEntitiesNameToID),
+	return args.Get(0).(registeredEntitiesNameToID),
 		args.Get(1).(UnregisteredEntities)
 }
 
@@ -74,8 +74,8 @@ func TestEmitter_Send_ErrorOnHostname(t *testing.T) {
 	idProvider := &mockedIdProvider{}
 
 	idProvider.
-		On("Entities", testIdentity, mock.Anything).
-		Return(RegisteredEntitiesNameToID{}, UnregisteredEntities{})
+		On("ResolveEntities", testIdentity, mock.Anything).
+		Return(registeredEntitiesNameToID{}, UnregisteredEntities{})
 
 	emitter := NewEmitter(agentCtx, dmSender, ffRetriever, idProvider)
 
@@ -100,9 +100,9 @@ func TestEmitter_SendOneEntityOutOfTwo(t *testing.T) {
 	}
 
 	idProvider.
-		On("Entities", testIdentity, expectedEntities).
+		On("ResolveEntities", testIdentity, expectedEntities).
 		Return(
-			RegisteredEntitiesNameToID{"a.entity.one": expectedEntityId},
+			registeredEntitiesNameToID{"a.entity.one": expectedEntityId},
 			UnregisteredEntities{
 				{
 					Reason: reasonEntityError,
@@ -165,9 +165,9 @@ func TestEmitter_Send(t *testing.T) {
 	}
 
 	idProvider.
-		On("Entities", testIdentity, expectedEntities).
+		On("ResolveEntities", testIdentity, expectedEntities).
 		Return(
-			RegisteredEntitiesNameToID{"unique name": expectedEntityId},
+			registeredEntitiesNameToID{"unique name": expectedEntityId},
 			UnregisteredEntities{})
 	dmSender.
 		On("SendMetrics", mock.AnythingOfType("[]protocol.Metric"))

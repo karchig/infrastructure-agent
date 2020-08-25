@@ -44,7 +44,7 @@ func TestIdProvider_Entities_MemoryFirst(t *testing.T) {
 		On("RegisterBatchEntities", agentIdn.ID, mock.Anything).
 		Return([]identityapi.RegisterEntityResponse{}, time.Second, nil)
 
-	cache := RegisteredEntitiesNameToID{
+	cache := registeredEntitiesNameToID{
 		"remote_entity_flex":  6543,
 		"remote_entity_nginx": 1234,
 	}
@@ -54,10 +54,10 @@ func TestIdProvider_Entities_MemoryFirst(t *testing.T) {
 		{Name: "remote_entity_nginx"},
 	}
 
-	idProvider := NewIDProvider(registerClient)
+	idProvider := NewCachedIDProvider(registerClient)
 
 	idProvider.cache = cache
-	idProvider.Entities(agentIdn, entities)
+	idProvider.ResolveEntities(agentIdn, entities)
 
 	registerClient.AssertNotCalled(t, "RegisterBatchEntities")
 }
@@ -85,7 +85,7 @@ func TestIdProvider_Entities_OneCachedAnotherRegistered(t *testing.T) {
 		On("RegisterBatchEntities", mock.Anything, mock.Anything).
 		Return(registerClientResponse, time.Second, nil)
 
-	cache := RegisteredEntitiesNameToID{
+	cache := registeredEntitiesNameToID{
 		"remote_entity_flex": 6543,
 	}
 
@@ -94,10 +94,10 @@ func TestIdProvider_Entities_OneCachedAnotherRegistered(t *testing.T) {
 		{Name: "remote_entity_nginx"},
 	}
 
-	idProvider := NewIDProvider(registerClient)
+	idProvider := NewCachedIDProvider(registerClient)
 
 	idProvider.cache = cache
-	registeredEntities, unregisteredEntities := idProvider.Entities(agentIdn, entities)
+	registeredEntities, unregisteredEntities := idProvider.ResolveEntities(agentIdn, entities)
 
 	assert.Empty(t, unregisteredEntities)
 	assert.Len(t, registeredEntities, 2)
@@ -110,18 +110,18 @@ func TestIdProvider_Entities_ErrorsHandling(t *testing.T) {
 	testCases := []struct {
 		name                         string
 		agentIdn                     entity.Identity
-		cache                        RegisteredEntitiesNameToID
+		cache                        registeredEntitiesNameToID
 		entitiesForRegisterClient    []protocol.Entity
 		registerClientResponse       []identityapi.RegisterEntityResponse
 		registerClientResponseErr    error
 		entitiesToRegister           []protocol.Entity
-		registeredEntitiesExpected   RegisteredEntitiesNameToID
+		registeredEntitiesExpected   registeredEntitiesNameToID
 		unregisteredEntitiesExpected UnregisteredEntities
 	}{
 		{
 			name:     "OneCached_OneFailed_ErrClient",
 			agentIdn: entity.Identity{ID: 13},
-			cache: RegisteredEntitiesNameToID{
+			cache: registeredEntitiesNameToID{
 				"remote_entity_flex": 6543,
 			},
 			entitiesForRegisterClient: []protocol.Entity{
@@ -135,7 +135,7 @@ func TestIdProvider_Entities_ErrorsHandling(t *testing.T) {
 				{Name: "remote_entity_flex"},
 				{Name: "remote_entity_nginx"},
 			},
-			registeredEntitiesExpected: RegisteredEntitiesNameToID{
+			registeredEntitiesExpected: registeredEntitiesNameToID{
 				"remote_entity_flex": 6543,
 			},
 			unregisteredEntitiesExpected: UnregisteredEntities{
@@ -151,7 +151,7 @@ func TestIdProvider_Entities_ErrorsHandling(t *testing.T) {
 		{
 			name:     "OneCached_OneFailed_ErrEntity",
 			agentIdn: entity.Identity{ID: 13},
-			cache: RegisteredEntitiesNameToID{
+			cache: registeredEntitiesNameToID{
 				"remote_entity_flex": 6543,
 			},
 			entitiesForRegisterClient: []protocol.Entity{
@@ -170,7 +170,7 @@ func TestIdProvider_Entities_ErrorsHandling(t *testing.T) {
 				{Name: "remote_entity_flex"},
 				{Name: "remote_entity_nginx"},
 			},
-			registeredEntitiesExpected: RegisteredEntitiesNameToID{
+			registeredEntitiesExpected: registeredEntitiesNameToID{
 				"remote_entity_flex": 6543,
 			},
 			unregisteredEntitiesExpected: UnregisteredEntities{
@@ -186,7 +186,7 @@ func TestIdProvider_Entities_ErrorsHandling(t *testing.T) {
 		{
 			name:     "OneCached_OneRegistered_OneFailed_ErrEntity",
 			agentIdn: entity.Identity{ID: 13},
-			cache: RegisteredEntitiesNameToID{
+			cache: registeredEntitiesNameToID{
 				"remote_entity_flex": 6543,
 			},
 			entitiesForRegisterClient: []protocol.Entity{
@@ -214,7 +214,7 @@ func TestIdProvider_Entities_ErrorsHandling(t *testing.T) {
 				{Name: "remote_entity_nginx"},
 				{Name: "remote_entity_kafka"},
 			},
-			registeredEntitiesExpected: RegisteredEntitiesNameToID{
+			registeredEntitiesExpected: registeredEntitiesNameToID{
 				"remote_entity_flex":  6543,
 				"remote_entity_kafka": 1234,
 			},
@@ -237,10 +237,10 @@ func TestIdProvider_Entities_ErrorsHandling(t *testing.T) {
 				On("RegisterBatchEntities", mock.Anything, mock.Anything).
 				Return(testCase.registerClientResponse, time.Second, testCase.registerClientResponseErr)
 
-			idProvider := NewIDProvider(registerClient)
+			idProvider := NewCachedIDProvider(registerClient)
 
 			idProvider.cache = testCase.cache
-			registeredEntities, unregisteredEntities := idProvider.Entities(testCase.agentIdn, testCase.entitiesToRegister)
+			registeredEntities, unregisteredEntities := idProvider.ResolveEntities(testCase.agentIdn, testCase.entitiesToRegister)
 
 			assert.Equal(t, testCase.registeredEntitiesExpected, registeredEntities)
 

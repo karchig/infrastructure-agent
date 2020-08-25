@@ -39,7 +39,7 @@ type emitter struct {
 	ffRetriever   feature_flags.Retriever
 	metricsSender MetricsSender
 	agentContext  agent.AgentContext
-	idProvider    idProviderInterface
+	idProvider    idProvider
 }
 
 type Emitter interface {
@@ -54,7 +54,7 @@ func NewEmitter(
 	agentContext agent.AgentContext,
 	dmSender MetricsSender,
 	ffRetriever feature_flags.Retriever,
-	idProvider idProviderInterface) Emitter {
+	idProvider idProvider) Emitter {
 
 	return &emitter{
 		agentContext:  agentContext,
@@ -143,10 +143,10 @@ func (e *emitter) process(
 	return composeEmitError(emitErrs, len(integrationData.DataSets))
 }
 
-func (e *emitter) RegisterEntities(entities []protocol.Entity) (RegisteredEntitiesNameToID, UnregisteredEntities) {
+func (e *emitter) RegisterEntities(entities []protocol.Entity) (registeredEntitiesNameToID, UnregisteredEntities) {
 	// Bulk update them (after checking our datastore if they exist)
 	// add entity ID to metric annotations
-	return e.idProvider.Entities(e.agentContext.AgentIdentity(), entities)
+	return e.idProvider.ResolveEntities(e.agentContext.AgentIdentity(), entities)
 }
 
 func emitInventory(
