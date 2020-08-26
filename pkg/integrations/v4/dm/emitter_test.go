@@ -61,8 +61,8 @@ type mockedIdProvider struct {
 	mock.Mock
 }
 
-func (mk *mockedIdProvider) ResolveEntities(agentIdn entity.Identity, entities []protocol.Entity) (registeredEntities registeredEntitiesNameToID, unregisteredEntities UnregisteredEntities) {
-	args := mk.Called(agentIdn, entities)
+func (mk *mockedIdProvider) ResolveEntities(entities []protocol.Entity) (registeredEntities registeredEntitiesNameToID, unregisteredEntities UnregisteredEntities) {
+	args := mk.Called(entities)
 	return args.Get(0).(registeredEntitiesNameToID),
 		args.Get(1).(UnregisteredEntities)
 }

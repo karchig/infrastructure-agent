@@ -77,6 +77,8 @@ func (p *cachedIdProvider) ResolveEntities(entities []protocol.Entity) (register
 		p.cacheMutex.Lock()
 		if foundID, ok := p.cache[e.Name]; ok {
 			registeredEntities[e.Name] = foundID
+		} else if foundUnregisteredEntities, ok := p.unregisteredEntities[e.Name]; ok {
+			unregisteredEntities = append(unregisteredEntities, foundUnregisteredEntities)
 		} else {
 			unregisteredEntities = append(unregisteredEntities, newUnregisteredEntity(e, reasonNotInCache, nil))
 			entitiesToRegister = append(entitiesToRegister, e)

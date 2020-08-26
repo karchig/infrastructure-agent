@@ -10,6 +10,7 @@ import (
 	"github.com/newrelic/infrastructure-agent/pkg/integrations/v4/protocol"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"sync"
 	"testing"
 	"time"
 )
@@ -37,11 +38,13 @@ func (mk *mockedRegisterClient) RegisterEntitiesRemoveMe(agentEntityID entity.ID
 
 func TestIdProvider_Entities_MemoryFirst(t *testing.T) {
 
-	agentIdn := entity.Identity{ID: 13}
+	agentIdentity := func() entity.Identity{
+		return entity.Identity{ID: 13}
+	}
 
 	registerClient := &mockedRegisterClient{}
 	registerClient.
-		On("RegisterBatchEntities", agentIdn.ID, mock.Anything).
+		On("RegisterBatchEntities", agentIdentity().ID, mock.Anything).
 		Return([]identityapi.RegisterEntityResponse{}, time.Second, nil)
 
 	cache := registeredEntitiesNameToID{
@@ -54,18 +57,19 @@ func TestIdProvider_Entities_MemoryFirst(t *testing.T) {
 		{Name: "remote_entity_nginx"},
 	}
 
-	idProvider := NewCachedIDProvider(registerClient)
+	idProvider := NewCachedIDProvider(registerClient, agentIdentity)
 
 	idProvider.cache = cache
-	idProvider.ResolveEntities(agentIdn, entities)
+	idProvider.ResolveEntities(entities)
 
 	registerClient.AssertNotCalled(t, "RegisterBatchEntities")
 }
 
 func TestIdProvider_Entities_OneCachedAnotherRegistered(t *testing.T) {
 
-	agentIdn := entity.Identity{ID: 13}
-
+	agentIdentity := func() entity.Identity{
+		return entity.Identity{ID: 13}
+	}
 	entitiesForRegisterClient := []protocol.Entity{
 		{
 			Name: "remote_entity_nginx",
@@ -75,15 +79,19 @@ func TestIdProvider_Entities_OneCachedAnotherRegistered(t *testing.T) {
 	registerClientResponse := []identityapi.RegisterEntityResponse{
 		{
 			ID:   1234,
-			Key:  "remote_entity_nginx_Key",
+			Key:  "remote_entity_nginx",
 			Name: "remote_entity_nginx",
 		},
 	}
 
+	var wg sync.WaitGroup
+	wg.Add(1)
 	registerClient := &mockedRegisterClient{}
 	registerClient.
 		On("RegisterBatchEntities", mock.Anything, mock.Anything).
-		Return(registerClientResponse, time.Second, nil)
+		Return(registerClientResponse, time.Second, nil).Run(func(args mock.Arguments){
+			wg.Done()
+	})
 
 	cache := registeredEntitiesNameToID{
 		"remote_entity_flex": 6543,
@@ -94,22 +102,31 @@ func TestIdProvider_Entities_OneCachedAnotherRegistered(t *testing.T) {
 		{Name: "remote_entity_nginx"},
 	}
 
-	idProvider := NewCachedIDProvider(registerClient)
+	idProvider := NewCachedIDProvider(registerClient, agentIdentity)
 
+	// change suggested - dont test internals -> make extra call to fill the cache
 	idProvider.cache = cache
-	registeredEntities, unregisteredEntities := idProvider.ResolveEntities(agentIdn, entities)
+	registeredEntities, unregisteredEntities := idProvider.ResolveEntities(entities)
 
-	assert.Empty(t, unregisteredEntities)
+	assert.Len(t, registeredEntities, 1)
+	assert.Len(t, unregisteredEntities, 1)
+	// do first request check stuff empty
+	wg.Wait()
+
+	time.Sleep(time.Second * 1)
+
+	registeredEntities, unregisteredEntities = idProvider.ResolveEntities(entities)
 	assert.Len(t, registeredEntities, 2)
+	assert.Len(t, unregisteredEntities, 0)
 
-	registerClient.AssertCalled(t, "RegisterBatchEntities", agentIdn.ID, entitiesForRegisterClient)
+	registerClient.AssertCalled(t, "RegisterBatchEntities", agentIdentity().ID, entitiesForRegisterClient)
 }
 
 func TestIdProvider_Entities_ErrorsHandling(t *testing.T) {
 
 	testCases := []struct {
 		name                         string
-		agentIdn                     entity.Identity
+		agentIdn                     func() entity.Identity
 		cache                        registeredEntitiesNameToID
 		entitiesForRegisterClient    []protocol.Entity
 		registerClientResponse       []identityapi.RegisterEntityResponse
@@ -120,7 +137,9 @@ func TestIdProvider_Entities_ErrorsHandling(t *testing.T) {
 	}{
 		{
 			name:     "OneCached_OneFailed_ErrClient",
-			agentIdn: entity.Identity{ID: 13},
+			agentIdn: func() entity.Identity{
+				return entity.Identity{ID: 13}
+			},
 			cache: registeredEntitiesNameToID{
 				"remote_entity_flex": 6543,
 			},
@@ -150,7 +169,9 @@ func TestIdProvider_Entities_ErrorsHandling(t *testing.T) {
 		},
 		{
 			name:     "OneCached_OneFailed_ErrEntity",
-			agentIdn: entity.Identity{ID: 13},
+			agentIdn: func() entity.Identity{
+				return entity.Identity{ID: 13}
+			},
 			cache: registeredEntitiesNameToID{
 				"remote_entity_flex": 6543,
 			},
@@ -185,7 +206,9 @@ func TestIdProvider_Entities_ErrorsHandling(t *testing.T) {
 		},
 		{
 			name:     "OneCached_OneRegistered_OneFailed_ErrEntity",
-			agentIdn: entity.Identity{ID: 13},
+			agentIdn: func() entity.Identity{
+				return entity.Identity{ID: 13}
+			},
 			cache: registeredEntitiesNameToID{
 				"remote_entity_flex": 6543,
 			},
@@ -232,21 +255,33 @@ func TestIdProvider_Entities_ErrorsHandling(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
+
+			var wg sync.WaitGroup
+			wg.Add(1)
+
 			registerClient := &mockedRegisterClient{}
 			registerClient.
 				On("RegisterBatchEntities", mock.Anything, mock.Anything).
-				Return(testCase.registerClientResponse, time.Second, testCase.registerClientResponseErr)
+				Return(testCase.registerClientResponse, time.Second, testCase.registerClientResponseErr).
+				Run(func(args mock.Arguments) {
+					wg.Done()
+				})
 
-			idProvider := NewCachedIDProvider(registerClient)
+			idProvider := NewCachedIDProvider(registerClient, testCase.agentIdn)
 
 			idProvider.cache = testCase.cache
-			registeredEntities, unregisteredEntities := idProvider.ResolveEntities(testCase.agentIdn, testCase.entitiesToRegister)
+			idProvider.ResolveEntities(testCase.entitiesToRegister)
+
+			wg.Wait()
+			time.Sleep(time.Second)
+
+			registeredEntities, unregisteredEntities := idProvider.ResolveEntities(testCase.entitiesToRegister)
 
 			assert.Equal(t, testCase.registeredEntitiesExpected, registeredEntities)
 
 			assert.ElementsMatch(t, testCase.unregisteredEntitiesExpected, unregisteredEntities)
 
-			registerClient.AssertCalled(t, "RegisterBatchEntities", testCase.agentIdn.ID, testCase.entitiesForRegisterClient)
+			registerClient.AssertCalled(t, "RegisterBatchEntities", testCase.agentIdn().ID, testCase.entitiesForRegisterClient)
 		})
 	}
 }
