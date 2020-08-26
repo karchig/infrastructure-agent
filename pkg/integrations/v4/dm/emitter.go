@@ -146,7 +146,7 @@ func (e *emitter) process(
 func (e *emitter) RegisterEntities(entities []protocol.Entity) (registeredEntitiesNameToID, UnregisteredEntities) {
 	// Bulk update them (after checking our datastore if they exist)
 	// add entity ID to metric annotations
-	return e.idProvider.ResolveEntities(e.agentContext.AgentIdentity(), entities)
+	return e.idProvider.ResolveEntities(entities)
 }
 
 func emitInventory(

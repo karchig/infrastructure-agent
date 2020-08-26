@@ -249,5 +249,4 @@ func TestIdProvider_Entities_ErrorsHandling(t *testing.T) {
 			registerClient.AssertCalled(t, "RegisterBatchEntities", testCase.agentIdn.ID, testCase.entitiesForRegisterClient)
 		})
 	}
-
 }
